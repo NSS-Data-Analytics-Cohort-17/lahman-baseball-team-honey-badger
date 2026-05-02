@@ -651,8 +651,8 @@ teamIDwinner   Team ID of the team that won the series
 lgIDwinner     League ID of the team that won the series
 teamIDloser    Team ID of the team that lost the series
 lgIDloser      League ID of the team that lost the series 
-wins           Wins by team that won the series
-losses         Losses by team that won the series
+wins           Wins by the team that won the series
+losses         Losses by the team that won the series
 ties           Tie games
 ------------------------------------------------------------------------------
 2.17 AwardsManagers table
@@ -682,8 +682,8 @@ yearID         Year
 lgID           League
 playerID       Manager ID code
 pointsWon      Number of points received
-pointsMax      Maximum numner of points possible
-votesFirst     Number of first place votes
+pointsMax      Maximum number of points possible
+votesFirst     Number of first-place votes
 
 ------------------------------------------------------------------------------
 2.20 AwardsSharePlayers table
@@ -693,8 +693,8 @@ yearID         Year
 lgID           League
 playerID       Player ID code
 pointsWon      Number of points received
-pointsMax      Maximum numner of points possible
-votesFirst     Number of first place votes
+pointsMax      Maximum number of points possible
+votesFirst     Number of first-place votes
 
 ------------------------------------------------------------------------------
 2.21 FieldingPost table
