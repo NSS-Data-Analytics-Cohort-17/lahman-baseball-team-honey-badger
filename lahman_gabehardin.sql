@@ -95,9 +95,17 @@ ORDER BY steal_percentage DESC
 LIMIT 1; 
 -- Chris Owings
 
+SELECT *
+FROM batting
+WHERE yearid= '2016'
+
 -- 7.  From 1970 – 2016, what is the largest number of wins for a team that did not win the world series? What is the smallest number of wins for
 	--a team that did win the world series? Doing this will probably result in an unusually small number of wins for a world series champion – determine 
 	-- why this is the case. Then redo your query, excluding the problem year. 
+
+SELECT COUNT (DISTINCT name)AS unique_teams, count(name), yearid
+FROM teams
+GROUP BY yearid
 
 (SELECT yearid,name AS series_winners, SUM(W)AS season_wins
 FROM teams
@@ -108,48 +116,36 @@ LIMIT 1)
 UNION
 (SELECT yearid,name, SUM(w)AS season_wins
 FROM teams
-WHERE yearid >= 1970 AND WSWIN = 'Y' AND yearid <> 1981
+WHERE yearid >= 1970 AND WSWIN = 'Y' AND yearid != 1981
 GROUP BY yearid,name
 ORDER BY season_wins ASC
 LIMIT 1); -- the 1981 season was shortened by a strike
 
 --How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? What percentage of the time?
 
-SELECT 
-	yearid
-	,MAX(W)AS season_wins
-	,CASE WHEN WSWIN = 'Y' THEN 'ws_winner'
-		  WHEN WSWIN = 'N' THEN ''
-	END
-FROM teams
-WHERE yearid >= 1970
-GROUP BY yearid
-ORDER BY yearid;
-
 SELECT * 
 FROM teams
-	WHERE yearid >=1970
 
 
 
-WITH max_season_wins AS
+WITH rs_champs AS
 	(
-	SELECT yearid,MAX(w)AS rs_winners
+	SELECT yearid,MAX(w)AS w
 	FROM teams
 	WHERE yearid >=1970
 	GROUP BY yearid
 	),
 	ws_winners AS
 	(
-	SELECT yearid,w,name
+	SELECT DISTINCT yearid,w,name,WSWIN
 	FROM teams
-	WHERE WSWIN = 'Y' 
+		INNER JOIN rs_champs USING(yearid,w)
+	--WHERE WSWIN = 'Y' 
 	)
-SELECT 
-	ROUND(SUM(CASE WHEN rs_winners::numeric = w::numeric THEN 1 ELSE 0 END)/COUNT(yearid)::numeric * 100,0)AS dominant_champ_percentage
-FROM Max_season_wins
-	LEFT JOIN ws_winners USING(yearid)
-WHERE yearid <> 1981 AND yearid <>1994
+SELECT SUM(CASE WHEN wswin = 'Y' THEN 1 END)/COUNT(yearid)::numeric * 100 AS dominant_champ_percentage
+FROM ws_winners
+-- 	LEFT JOIN ws_winners USING(yearid)
+-- WHERE yearid <> 1981 AND yearid <>1994
 
 -- still needs to exclude 1981 and get a percentage for wswin that have the max wins per season
 	
@@ -158,21 +154,36 @@ WITH ws_winners AS(
 	SELECT yearid,name
 	FROM teams
 	WHERE WSWIN = 'Y' AND yearid >=1970
-	
-
-
 
 -- 8. Using the attendance figures from the homegames table, find the teams and parks which had the top 5 average attendance per game in 2016 
 	--(where average attendance is defined as total attendance divided by number of games). Only consider parks where there were at least 10 games played. 
 	--Report the park name, team name, and average attendance. Repeat for the lowest 5 average attendance.
 
+(SELECT yearid,teams.name, park_name, h.attendance / games AS avg_stadium_attendance--, SUM(teams.attendance)/SUM(teams.g) AS avg_team_attendance
+FROM homegames h
+	JOIN parks USING (park)
+	JOIN teams ON teams.teamid = h.team AND yearid = h.year
+WHERE year = 2016 AND games >=10
+ORDER BY avg_stadium_attendance DESC
+LIMIT 5)
+UNION all
+(SELECT yearid,teams.name, park_name, h.attendance / games AS avg_stadium_attendance--, SUM(teams.attendance)/SUM(teams.g) AS avg_team_attendance
+FROM homegames h
+	JOIN parks USING (park)
+	JOIN teams ON teams.teamid = h.team AND yearid = h.year
+WHERE year = 2016 AND games >=10
+ORDER BY avg_stadium_attendance ASC
+LIMIT 5)
 
 -- 9. Which managers have won the TSN Manager of the Year award in both the National League (NL) and the American League (AL)? Give their full 
 	--name and the teams that they were managing when they won the award.
 
+SELECT *
+FROM awardsmanagers
+WHERE awardid = 'TSN Manager of the Year' 
+
 -- 10. Find all players who hit their career highest number of home runs in 2016. Consider only players who have played in the league for at 
 	--least 10 years, and who hit at least one home run in 2016. Report the players' first and last names and the number of home runs they hit in 2016.
-
 
 
 -- **Open-ended questions**
