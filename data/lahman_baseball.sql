@@ -245,52 +245,144 @@ ORDER BY ch.total_hr DESC
 --  11.	Is there any correlation between number of wins and team salary? Use data from 2000 and later to answer this question. As you do this analysis, 
 --		keep in mind that salaries across the whole league tend to increase together, so you may want to look on a year-by-year basis.
 
-WITH correlation_NL AS (
-		SELECT te.teamid
-				, te.yearid
-				, te.w AS wins
-				, te.lgid
-				, te.attendance
-				, SUM(sa.salary)
-		FROM teams AS te
-		INNER JOIN salaries AS sa ON te.teamid = sa.teamid AND te.yearid = sa.yearid
-		WHERE te.yearid >= 2000 AND te.lgid = 'NL'
-		GROUP BY	te.teamid
-					,te.yearid
-					,te.w
-					,te.lgid
-					,te.attendance
-		ORDER BY te.yearid
+WITH team_salaries AS (
+		SELECT 	teamid
+				,yearid
+				,SUM(salary) AS total_salaries
+		FROM	salaries
+		WHERE yearid >= 2000
+		GROUP BY teamid, yearid
+),
+team_wins AS (	SELECT 	teamid
+				,yearid
+				,w AS wins
+		FROM	teams
+		WHERE yearid >= 2000
+)
+SELECT tw.yearid AS year, CORR(tw.wins, ts.total_salaries)
+FROM team_wins AS tw
+INNER JOIN team_salaries AS ts ON tw.teamid=ts.teamid AND tw.yearid = ts.yearid
+GROUP BY tw.yearid
+ORDER BY tw.yearid DESC
+;
+		-- There is no correlation between the salary and the number of wins in the league.
 					
-),
-correlation_AL AS (
-		SELECT te.teamid
-				, te.yearid
-				, te.w AS wins
-				, te.lgid
-				, te.attendance
-				, sa.salary
-		FROM teams AS te
-		INNER JOIN salaries AS sa ON te.teamid = sa.teamid
-		WHERE te.yearid >= 2000 AND te.lgid = 'AL'
-),
-Join_tables AS (
-		SELECT *
-		FROM correlation_NL AS cnl
-		INNER JOIN correlation_AL AS cal ON (cnl.teamid) = (cal.teamid) AND (cnl.yearid) = (cal.yearid)
-
 
 --	12.	In this question, you will explore the connection between number of wins and attendance.
---		<ol type="a">
---		<li>Does there appear to be any correlation between attendance at home games and number of wins? </li>
---		<li>Do teams that win the world series see a boost in attendance the following year? What about teams that made the playoffs? Making the playoffs 
---		means either being a division winner or a wild card winner.</li>
-		</ol>
+--		a.	Does there appear to be any correlation between attendance at home games and number of wins?
+
+WITH homegames_attendance AS (
+		SELECT 	team
+				,year
+				,SUM(attendance) AS total_attendance
+		FROM	homegames
+		WHERE year >= 2000
+		GROUP BY team, year
+),
+team_wins AS (	SELECT 	teamid
+				,yearid
+				,w AS wins
+		FROM	teams
+		WHERE yearid >= 2000
+)
+SELECT tw.yearid AS year, CORR(tw.wins, hga.total_attendance)
+FROM team_wins AS tw
+INNER JOIN homegames_attendance AS hga ON tw.teamid = hga.team AND tw.yearid = hga.year
+GROUP BY tw.yearid
+ORDER BY tw.yearid ASC
+;
+
+		-- There is no correlation between the salary and the number of wins at home.
+
+
+--		b.	Do teams that win the world series see a boost in attendance the following year? What about teams that made the playoffs? Making the playoffs 
+--			means either being a division winner or a wild card winner.
+
+
+SELECT 
+    t1.yearID,
+    t1.name AS team_name,
+    t1.attendance AS current_year_attendance,
+    t2.attendance AS next_year_attendance,
+    (t2.attendance - t1.attendance) AS attendance_difference,
+    CASE 
+        WHEN (t2.attendance - t1.attendance) > 0 THEN 'Increase'
+        ELSE 'Reduction / No change'
+    END AS trend
+FROM teams AS t1
+INNER JOIN teams AS t2 
+    ON t1.teamID = t2.teamID 
+    AND t2.yearID = t1.yearID + 1
+WHERE t1.yearID >= 1995 
+  AND t1.WSWin = 'Y'
+ORDER BY t1.yearID ASC;
+
+		-- Mostly was an increased after the teams won the world series
+
+
+-- FOR playoff winners:
+
+SELECT 
+    t1.yearID,
+    t1.name AS team_name,
+    t1.attendance AS current_year_attendance,
+    t2.attendance AS next_year_attendance,
+    (t2.attendance - t1.attendance) AS attendance_difference,
+    CASE 
+        WHEN (t2.attendance - t1.attendance) > 0 THEN 'Increase'
+        ELSE 'Reduction / No change'
+    END AS trend
+FROM teams AS t1
+INNER JOIN teams AS t2 
+    ON t1.teamID = t2.teamID 
+    AND t2.yearID = t1.yearID + 1
+WHERE t1.yearID >= 1995 
+  AND t1.divwin = 'Y'
+ORDER BY t1.yearID ASC;
+
+
+		-- Mostly was an increased after the teams won the playoffs
+
+		
+-- Wildcard winners
+
+SELECT 
+    t1.yearID,
+    t1.name AS team_name,
+    t1.attendance AS current_year_attendance,
+    t2.attendance AS next_year_attendance,
+    (t2.attendance - t1.attendance) AS attendance_difference,
+    CASE 
+        WHEN (t2.attendance - t1.attendance) > 0 THEN 'Increase'
+        ELSE 'Reduction / No change'
+    END AS trend
+FROM teams AS t1
+INNER JOIN teams AS t2 
+    ON t1.teamID = t2.teamID 
+    AND t2.yearID = t1.yearID + 1
+WHERE t1.yearID >= 1995 
+  AND t1.wcwin = 'Y'
+ORDER BY t1.yearID ASC;
+
+		-- Mostly was an increased after the teams won the wildcard
 
 
 --	13. It is thought that since left-handed pitchers are more rare, causing batters to face them less often, that they are more effective. 
 --		Investigate this claim and present evidence to either support or dispute this claim. First, determine just how rare left-handed pitchers are 
 --		compared with right-handed pitchers. Are left-handed pitchers more likely to win the Cy Young Award? Are they more likely to make it into the hall of fame?
+
+SELECT 
+    pe.throws
+	,SUM(pi.so) AS total_strikeouts
+    ,COUNT(DISTINCT pe.playerid) AS total_pitchers
+	,ROUND((SUM(pi.so)::numeric / COUNT(DISTINCT pe.playerid)::numeric), 2) AS avg_strikeouts_per_pitcher
+FROM people AS pe
+INNER JOIN pitching AS pi USING(playerid)
+INNER JOIN awardsplayers AS awp ON pi.yearid = awp.yearid AND pi.playerid = awp.playerid
+WHERE pi.yearid >= 2000
+  AND pe.throws IN ('L', 'R') AND awp.awardid = 'Cy Young Award'
+GROUP BY pe.throws
+;
 
 --						BONUS
 
@@ -357,7 +449,7 @@ Join_tables AS (
 --  l,
 --  total_games,
 --  w*100.0 / total_games AS winning_pct
--	FROM teams t,
+--	FROM teams t,
 --	LATERAL (
 --	  SELECT w + l AS total_games
 --	) AS tg
