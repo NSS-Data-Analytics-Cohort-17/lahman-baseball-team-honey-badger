@@ -1,0 +1,22 @@
+--11. Is there any correlation between number of wins and team salary?
+Use data from 2000 and later to answer this question.
+As you do this analysis,
+keep in mind that salaries across the whole league tend to increase together,
+so you may want to look on a year-by-year basis
+
+
+
+
+--
+SELECT teams.yearid,
+       teams.teamid,
+       teams.w AS wins,
+       SUM(salaries.salary) AS total_salary,
+       RANK() OVER (PARTITION BY teams.yearid ORDER BY teams.w DESC) AS win_rank,
+       RANK() OVER (PARTITION BY teams.yearid ORDER BY SUM(salaries.salary) DESC) AS salary_rank
+FROM teams
+JOIN salaries ON teams.teamid = salaries.teamid
+             AND teams.yearid = salaries.yearid
+WHERE teams.yearid >= 2000
+GROUP BY teams.yearid, teams.teamid, teams.w
+ORDER BY teams.yearid, win_rank;
