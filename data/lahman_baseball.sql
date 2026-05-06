@@ -372,18 +372,68 @@ ORDER BY t1.yearID ASC;
 --		compared with right-handed pitchers. Are left-handed pitchers more likely to win the Cy Young Award? Are they more likely to make it into the hall of fame?
 
 SELECT 
-    pe.throws
-	,SUM(pi.so) AS total_strikeouts
-    ,COUNT(DISTINCT pe.playerid) AS total_pitchers
-	,ROUND((SUM(pi.so)::numeric / COUNT(DISTINCT pe.playerid)::numeric), 2) AS avg_strikeouts_per_pitcher
+    pe.throws,
+    COUNT(DISTINCT pe.playerid) AS total_pitchers,
+    ROUND(
+        (COUNT(DISTINCT pe.playerid)::numeric / 
+         SUM(COUNT(DISTINCT pe.playerid)) OVER()) * 100, 2
+    ) AS percentage
 FROM people AS pe
 INNER JOIN pitching AS pi USING(playerid)
-INNER JOIN awardsplayers AS awp ON pi.yearid = awp.yearid AND pi.playerid = awp.playerid
 WHERE pi.yearid >= 2000
-  AND pe.throws IN ('L', 'R') AND awp.awardid = 'Cy Young Award'
+  AND pe.throws IN ('L', 'R')
+GROUP BY pe.throws;
+
+		-- Left handed pichers are rare in Baseball, there are only the 28% of the total.
+
+SELECT 
+    pe.throws,
+    SUM(pi.so) AS total_strikeouts,
+    COUNT(DISTINCT pe.playerid) AS total_pitchers,
+    ROUND((SUM(pi.so)::numeric / COUNT(DISTINCT pe.playerid)::numeric), 2
+    	) AS avg_strikeouts_per_pitcher
+FROM people AS pe
+INNER JOIN pitching AS pi USING(playerid)
+WHERE pi.yearid >= 2000
+  AND pe.throws IN ('L', 'R')
 GROUP BY pe.throws
 ;
 
+		-- Left handed pichers are slighter better than right handed pitchers
+
+SELECT 
+    pe.throws,
+    COUNT(DISTINCT aw.yearID) AS total_cy_young_awards,
+    ROUND(
+        (COUNT(DISTINCT aw.yearID)::numeric / 
+         SUM(COUNT(DISTINCT aw.yearID)) OVER()) * 100, 2
+    ) AS percentage
+FROM people AS pe
+INNER JOIN awardsplayers AS aw ON pe.playerID = aw.playerID
+WHERE aw.awardID = 'Cy Young Award'
+  AND aw.yearID >= 2000
+  AND pe.throws IN ('L', 'R')
+GROUP BY pe.throws;
+
+		-- Left-handed pitchers win a higher percentage of Cy Young Awards relative to their overall proportion in the league
+
+SELECT 
+    pe.throws,
+    COUNT(DISTINCT pe.playerID) AS hhof_pitchers,
+    ROUND(
+        (COUNT(DISTINCT pe.playerID)::numeric / 
+         SUM(COUNT(DISTINCT pe.playerID)) OVER()) * 100, 2
+    ) AS percentage
+FROM people AS pe
+INNER JOIN halloffame AS hf ON pe.playerID = hf.playerID
+WHERE hf.category = 'Player' 
+  AND hf.inducted = 'Y'
+  AND pe.throws IN ('L', 'R')
+GROUP BY pe.throws
+;
+
+
+		-- There is no distinct bias; induction is determined by overall career achievements and statistics rather than throwing hand
 --						BONUS
 
 --	In these exercises, you'll explore a couple of other advanced features of PostgreSQL. 
