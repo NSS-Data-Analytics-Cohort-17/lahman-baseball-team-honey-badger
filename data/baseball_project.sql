@@ -1,6 +1,8 @@
 -- 1. What range of years for baseball games played does the provided database cover? 
 
-SELECT MIN(yearid), MAX(yearid)
+SELECT 
+	MIN(yearid), 
+	MAX(yearid)
 FROM teams;
 
 -- answer: from 1871 to 2016.
@@ -10,14 +12,28 @@ FROM teams;
 -- 2. Find the name and height of the shortest player in the database. 
 -- How many games did he play in? What is the name of the team for which he played?
 
+WITH shortest_player AS (
+    SELECT 
+        namefirst AS first_name, 
+        namelast AS last_name, 
+        height AS height_inches,
+		playerid
+    FROM people
+    WHERE height = (SELECT MIN(height) FROM people)
+)
 SELECT 
-	namefirst AS first_name, 
-	namelast AS last_name, 
-	height AS height_inches
-FROM people
-WHERE height = (SELECT MIN(height)
-				FROM people
-				);
+first_name, 
+   last_name, 
+   height_inches, 
+   teams.teamid, 
+   SUM(batting.g) AS games_played
+FROM shortest_player
+INNER JOIN batting USING(playerid)
+INNER JOIN teams USING(teamid)
+GROUP BY first_name, 
+   last_name, 
+   height_inches, 
+   teams.teamid;
 				
 -- answer: the shortest person was Eddie Gaedel at 43".
 
@@ -47,6 +63,8 @@ GROUP BY
 	playerid
 ORDER BY salary DESC;
 
+-------------------------------------------------------------------
+
 -- answer: David Price earned the most in the majors: $81,851,296.00"
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -62,8 +80,7 @@ WITH position_catagory AS (
 		CASE
 			WHEN pos = 'OF' 
 				THEN 'Outfield'
-			WHEN pos =	
-					'SS'
+			WHEN pos ='SS'
 					OR pos = '1B'
 					OR pos = '2B'
 					OR pos = '3B'
@@ -91,8 +108,8 @@ ORDER BY put_outs DESC;
 
 WITH avg_so_hr AS 
 					(SELECT 
-						SUM(so) / (SUM(g) / 2.0) AS avg_so,
-        				SUM(hr) / (SUM(g) / 2.0) AS avg_hr,
+						SUM(so) / (SUM(g) / 1.0) AS avg_so,
+        				SUM(hr) / (SUM(g) / 1.0) AS avg_hr,
 						(yearID / 10) * 10 AS decade
 					FROM teams
 					WHERE (yearid/10)*10 >= 1920
@@ -101,7 +118,30 @@ SELECT decade,
 	ROUND(avg_so, 2) AS avg_strikeouts,
 	ROUND(avg_hr, 2) AS avg_homeruns
 FROM avg_so_hr
-ORDER BY decade DESC;
+ORDER BY decade ASC;
+
+--------------------------------------------
+-- for refrences - Isaac's work, *not mine*
+-- basically, generate series creates a new column and therefore doesn't need to be from a table
+
+WITH decades AS(SELECT 
+				generate_series(1920, 2020, 10) AS decade_start
+) 
+SELECT 
+	decade_start || 's' AS decade,
+	SUM(so) AS total_strikeouts,
+	SUM(hr) AS total_homeruns,
+	SUM(g) AS total_games,
+	SUM(so) / SUM(g) AS avg_strkeouts, 
+	SUM(hr) / SUM(g) AS avg_homeruns
+FROM 
+	decades
+	INNER JOIN teams 
+		ON teams.yearid 
+		BETWEEN decades.decade_start 
+		AND decades.decade_start + 9
+GROUP BY decade
+ORDER BY decade DESC
    
 -------------------------------------------------------------------------------------------------------------------------
 
@@ -110,9 +150,9 @@ ORDER BY decade DESC;
 -- (A stolen base attempt results either in a stolen base or being caught stealing.) 
 -- Consider only players who attempted _at least_ 20 stolen bases.
 
-SELECT people.namefirst AS first_name,
+SELECT 
+	people.namefirst AS first_name,
 	people.namelast AS last_name, 
-	sb - cs AS successful_steals, 
 	ROUND((sb * 100.0) / NULLIF(sb+cs, 0),2) AS percent_sb_success
 FROM batting
 JOIN people USING(playerid)
@@ -140,6 +180,8 @@ WHERE yearID BETWEEN 1970 AND 2016
 ORDER BY W DESC
 LIMIT 1;
 
+-- seattle mariners had 116 wins, but did not win WS in 2001
+
 SELECT name AS team_name, yearID, W as wins
 FROM teams
 WHERE yearID BETWEEN 1970 AND 2016
@@ -147,16 +189,41 @@ WHERE yearID BETWEEN 1970 AND 2016
 ORDER BY W ASC
 LIMIT 1;
 
-SELECT name AS team_name, yearID, W as wins
-FROM teams 
-WHERE yearID BETWEEN 1970 AND 2016
-	AND WSWin = 'Y' 
-	AND (name, W) IN (SELECT name, MAX(W)
-							FROM teams
-							WHERE yearID BETWEEN 1970 AND 2016
-							GROUP BY name)
+-- la dodgers had 63 wins, but did win the WS in 1981
 
-							--
+WITH ws_winners AS (SELECT 
+					name AS team_name, 
+					yearID, 
+					W as wins
+				FROM teams
+				WHERE yearID BETWEEN 1970 AND 2016
+				AND WSWin = 'Y'
+				),
+yearly_max_wins AS (SELECT
+					yearID,
+					MAX(w) AS max_wins
+				FROM teams
+				WHERE yearID BETWEEN 1970 AND 2016
+				GROUP BY yearid
+				),
+ws_vs_max AS (SELECT 
+				ws_winners.team_name,
+				ws_winners.yearID,
+				ws_winners.wins,
+				yearly_max_wins.max_wins,
+				CASE WHEN ws_winners.wins < yearly_max_wins.max_wins 
+					THEN 1 ELSE 0 END AS did_not_have_max_wins
+			FROM ws_winners
+			JOIN yearly_max_wins USING(yearid))
+SELECT COUNT(*) AS total_ws_wins, SUM(did_not_have_max_wins) AS count_ws_winner_did_not_lead_wins,
+ROUND(100.0* SUM(did_not_have_max_wins)/ COUNT(*), 2) AS percent_ws_winner_did_not_lead_wins
+	FROM ws_vs_max;
+	
+-- to calculate the number of times a world series winner did get the WS and highest W in league, 
+-- we can find the inverse of 73.91%, or 26.09%
+
+
+
 -------------------------------------------------------------------------------------------------------------------------
 
 -- 8. Using the attendance figures from the homegames table, 
@@ -220,33 +287,48 @@ INNER JOIN awardsmanagers USING(playerid)
 INNER JOIN managers USING(playerid, yearid, lgid)
 INNER JOIN teams USING(teamid, yearid, lgid)
 WHERE awardid = 'TSN Manager of the Year';
+
+-- "Jim Leyland" and "Davey Johnson"
 -------------------------------------------------------------------------------------------------------------------------
 
 -- 10. Find all players who hit their career highest number of home runs in 2016. 
 -- Consider only players who have played in the league for at least 10 years, 
 -- and who hit at least one home run in 2016. 
 -- Report the players first and last names and the number of home runs they hit in 2016.
+
 WITH decade_career AS (SELECT
-   							playerid,
-    						debut,
-   							finalgame,
-    						LEFT(finalgame, 4)::INT - LEFT(debut, 4)::INT AS career_years
+   							playerid
 						FROM people
 						WHERE debut IS NOT NULL
-  							AND finalgame IS NOT NULL)
+  							AND finalgame IS NOT NULL
+							AND LEFT(finalgame, 4)::INT - LEFT(debut, 4)::INT >= 10
+						),
+career_hr_max AS (SELECT
+						playerid,
+						MAX(hr) AS max_hr
+					FROM batting
+					GROUP BY playerid
+					),
+hr_2016 AS (SELECT
+				playerid,
+				SUM(HR) AS hr_in_2016
+			FROM batting
+			WHERE yearid = 2016
+			GROUP BY playerid
+			)
 SELECT 
-	namefirst || ' ' || namelast AS full_name,
+	people.namefirst || ' ' || people.namelast AS full_name,
+	hr_2016.hr_in_2016
 FROM decade_career
+INNER JOIN hr_2016 USING(playerid)
+INNER JOIN career_hr_max USING(playerid)
 INNER JOIN people USING(playerid)
+WHERE hr_2016.hr_in_2016 >= 1
+	AND hr_2016.hr_in_2016 = career_hr_max.max_hr
+ORDER BY hr_in_2016 DESC;
 
-SELECT *
-FROM  batting
-WHERE yearid = 2016
-	AND (hr) IN
-		(SELECT MAX(HR)
-		FROM batting 
-			WHERE hr > 0
-		GROUP BY playerid)
+-- Edwin Encarnacion had 42 hr in 2016. This player set a personal record for annual hr's with 2016,
+-- and preformed better than all other players who share HR PR's in 2016.
 
 -------------------------------------------------------------------------------------------------------------------------
 
@@ -257,6 +339,61 @@ WHERE yearid = 2016
 -- keep in mind that salaries across the whole league tend to increase together, 
 -- so you may want to look on a year-by-year basis.
 
+WITH sum_team_salary_per_year AS (SELECT 
+							SUM(salary) AS sum_salary, 
+							teamid, yearid
+						FROM salaries
+							WHERE yearid >= 2000
+						GROUP BY teamid, yearid
+						),
+wins_per_year AS (SELECT teamid,
+							SUM(w) AS wins,
+							yearid
+							FROM teams
+							WHERE  yearid >= 2000
+								AND (lgID = 'NL' OR lgID = 'AL')
+							GROUP BY teamid, yearid)
+SELECT 
+    yearid, 
+	CORR(sum_team_salary_per_year.sum_salary, wins_per_year.wins)
+FROM  sum_team_salary_per_year
+INNER JOIN wins_per_year USING(teamid, yearid)
+GROUP BY yearid
+
+-- some years, spending more = winning more
+
+WITH sum_team_salary_per_year AS (SELECT 
+							SUM(salary) AS sum_salary, 
+							teamid, yearid
+						FROM salaries
+							WHERE yearid >= 2000
+						GROUP BY teamid, yearid
+						),
+wins_per_year AS (SELECT teamid,
+							SUM(w) AS wins,
+							yearid
+							FROM teams
+							WHERE  yearid >= 2000
+								AND (lgID = 'NL' OR lgID = 'AL')
+							GROUP BY teamid, yearid)
+SELECT 
+    teamid, 
+	CORR(sum_team_salary_per_year.sum_salary, wins_per_year.wins)
+FROM  sum_team_salary_per_year
+INNER JOIN wins_per_year USING(teamid, yearid)
+GROUP BY teamid
+ORDER BY corr DESC
+
+-- my inital thought towards using a correation function (r) to find a linear trend MAY be
+-- misleading when broken down by team. I think a high corrleation value only maps the best value or budgeting.
+-- so, a team with low spending could have done averagly well in the regular season.
+-- However, in the world of baseball, teams want to win and secure a spot in the playoffs.
+-- So, teams that spend alot and won alot may have a similar r value to a team that lost alot, 
+-- but also didn't spend money
+
+-- Alternatively, I think measuring the success of spending more = winning more can be better
+-- shown by grouping by years, since it averages all of the teams across the board with their winnings.
+
 -------------------------------------------------------------------------------------------------------------------------
 
 -- 12. In this question, you will explore the connection between number of wins and attendance.
@@ -266,6 +403,29 @@ WHERE yearid = 2016
 -- What about teams that made the playoffs? Making the playoffs means either being a division winner or a wild card winner.
 -- </li>
 -- --     </ol>
+
+WITH sum_attendance AS (SELECT 
+							SUM(homegames.attendance) AS total_lifetime_attendance, 
+							teams.name
+						FROM homegames
+						INNER JOIN teams ON homegames.year = teams.yearid
+						GROUP BY  teams.name
+						ORDER BY total_lifetime_attendance DESC
+						),
+sum_wins AS (SELECT 
+				SUM(w) AS total_lifetime_wins, 
+				teams.name
+				FROM teams
+				GROUP BY  teams.name
+				ORDER BY total_lifetime_wins DESC)
+SELECT corr(sum_wins.total_lifetime_wins, sum_attendance.total_lifetime_attendance)
+FROM sum_wins
+INNER JOIN sum_attendance USING(name)
+LIMIT 40;
+
+-- with a R of .89, the data strongly suggests that high attendance is associated wtih more wins
+
+
 
 -------------------------------------------------------------------------------------------------------------------------
 
